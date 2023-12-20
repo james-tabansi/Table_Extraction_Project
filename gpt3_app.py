@@ -31,9 +31,12 @@ from langchain.vectorstores import FAISS
 #load the environment variable
 load_dotenv(dotenv_path='.env')
 
+#create embeddings
+embeddings = OpenAIEmbeddings()
+
 ## design the user interface
 #set the title
-st.title("Table Extraction Application")
+st.title("Table Extraction Application using GPT3")
 #display message to user
 st.header("Upload your PDF to read the tables")
 
@@ -41,23 +44,22 @@ st.header("Upload your PDF to read the tables")
 pdf = st.file_uploader("Upload your pdf", type='pdf')
 
 from utility_fns import table_viewer
+from functions import get_table_objects, convert_table_to_string
 
 #if pdf is uploaded
 if pdf is not None:
-    #get the name of the pdf file
-    name = pdf.name
-    #display the name
-    # st.write(name)
-    #create a temporal file path to locate the pdf
-    temp_file_path = os.path.join(tempfile.mkdtemp(), str(name))
 
-    #save the pdf file inside a temporal folder such that the file path will now exist
-    with open(temp_file_path, "wb") as temp_file:
-        temp_file.write(pdf.read())
+    #get the table objects
+    table_objects, ind  = get_table_objects(pdf)
 
-    #display the tables found in the file with accurate description of the pages found and the table number
-    table_content = table_viewer(temp_file_path)
-    st.write(table_content)
+
+    page_num = st.sidebar.selectbox("Select page to view Table content", options=ind) - 1
+
+    #display the selected table
+    st.table(table_objects[int(page_num)].extract())
+
+    #convert table to string
+    content = convert_table_to_string(table_objects, int(page_num))
 
     #split the text into tokens so it is not too large for the model to process
     #'\n' uses the new line character as the separator
@@ -69,10 +71,7 @@ if pdf is not None:
         )
 
     #pass the content of the table to the splitter to obtain tokens
-    tokens = text_splitter.split_text(table_content)
-
-    #create embeddings
-    embeddings = OpenAIEmbeddings()
+    tokens = text_splitter.split_text(content)
 
     #create a knowledge base. this knowledge is like a vocabulary
     #it
@@ -80,8 +79,9 @@ if pdf is not None:
 
     #get the user to give prompts or questions on the pdf
     query = st.text_input("Ask questions about the Tables in the PDF")
+    but1  = st.button("Ask GPT3?")
 
-    if query is not None:
+    if but1:
         #if user inputs a query
         #take the query and search the knowledge base for content related to user quuery
         information = knowledge_base.similarity_search(query)
